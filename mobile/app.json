@@ -1,0 +1,52 @@
+{
+  "expo": {
+    "name": "EmotionCoach",
+    "slug": "emotion-coach",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "emotioncoach",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "resizeMode": "contain",
+      "backgroundColor": "#1b1b2f"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.you.emotioncoach",
+      "infoPlist": {
+        "CFBundleDisplayName": "情感教练",
+        "NSPhotoLibraryUsageDescription": "用于选择聊天截图以识别文字",
+        "NSCameraUsageDescription": "用于拍摄聊天截图"
+      }
+    },
+    "android": {
+      "package": "com.you.emotioncoach",
+      "adaptiveIcon": {
+        "backgroundColor": "#1b1b2f"
+      },
+      "permissions": [
+        "android.permission.RECORD_AUDIO"
+      ]
+    },
+    "plugins": [
+      "expo-image-picker",
+      [
+        "llama.rn",
+        {
+          "enableEntitlements": true,
+          "entitlementsProfile": "development",
+          "forceCxx20": true,
+          "enableOpenCL": true
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "b75e7de8-8c87-4ac6-aa96-f62bae393b9a"
+      }
+    }
+  }
+}
