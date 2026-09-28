@@ -36,7 +36,7 @@ jobs:
         run: |
           mkdir -p build
           xcodebuild -workspace ios/*.xcworkspace \
-            -scheme EmotionCoach \
+            -scheme SnapBridge \
             -configuration Release \
             -sdk iphoneos \
             -destination 'generic/platform=iOS' \
