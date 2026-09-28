@@ -1,0 +1,59 @@
+name: Build iOS IPA
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: macos-14
+    timeout-minutes: 60
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - name: 拉取代码
+        uses: actions/checkout@v4
+
+      - name: 安装 Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: 安装项目依赖
+        run: npm install
+
+      - name: 生成 iOS 原生工程 (expo prebuild)
+        run: npx expo prebuild -p ios --no-install
+
+      - name: 安装 CocoaPods 依赖
+        run: |
+          cd ios
+          pod install --repo-update
+
+      - name: 编译（未签名 IPA）
+        run: |
+          mkdir -p build
+          xcodebuild -workspace ios/*.xcworkspace \
+            -scheme EmotionCoach \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -archivePath build/App.xcarchive \
+            archive CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO
+
+      - name: 打包成 IPA
+        run: |
+          mkdir -p build/Payload
+          cp -R build/App.xcarchive/Products/Applications/*.app build/Payload/
+          cd build
+          zip -qry emotion-coach-unsigned.ipa Payload
+          ls -lh emotion-coach-unsigned.ipa
+
+      - name: 上传 IPA 产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: emotion-coach-unsigned-ipa
+          path: mobile/build/emotion-coach-unsigned.ipa
+          retention-days: 30
