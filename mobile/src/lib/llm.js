@@ -39,12 +39,12 @@ function qwenPrompt(system, user) {
 }
 
 // 生成文本（全量返回）
-export async function generate(system, user, settings) {
+export async function generate(system, user, settings, opts = {}) {
   if (settings.useLocal && localReady) {
     const prompt = qwenPrompt(system, user);
     const res = await ctx.completion({
       prompt,
-      n_predict: 600,
+      n_predict: opts.maxTokens || 600,
       temperature: 0.8,
       top_p: 0.9,
       stop: ['<|im_end|>'],

@@ -9,17 +9,23 @@ export const DEFAULT_SETTINGS = {
   modelUrl: '',             // 本地 GGUF 模型下载地址（你托管的可公网访问 URL）
   apiBase: 'https://open.bigmodel.cn/api/paas/v4', // 智谱兼容 OpenAI 接口
   apiKey: '',               // 智谱 API Key（免费）
-  cloudModel: 'glm-4-flash',
+  cloudModel: 'glm-4-air',  // 默认用 air，比 flash 聪明
   visionModel: 'glm-4v-flash',
+  disguiseOn: true,         // 暗门/伪装开关（默认开，桌面显示 SnapBridge）
+  resignDate: 0,            // 上次重签时间（用于 7 天红点提醒）
 };
 
 export async function loadSettings() {
   try {
     const raw = await AsyncStorage.getItem(SETTINGS_KEY);
-    if (!raw) return { ...DEFAULT_SETTINGS };
-    return { ...DEFAULT_SETTINGS, ...JSON.parse(raw) };
+    let s = raw ? { ...DEFAULT_SETTINGS, ...JSON.parse(raw) } : { ...DEFAULT_SETTINGS };
+    if (!s.resignDate) {
+      s.resignDate = Date.now();
+      await AsyncStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
+    }
+    return s;
   } catch {
-    return { ...DEFAULT_SETTINGS };
+    return { ...DEFAULT_SETTINGS, resignDate: Date.now() };
   }
 }
 
@@ -49,6 +55,9 @@ export function newGirl(name) {
       age: '', zodiac: '', personality: '', channel: '', meetTime: '',
       interests: '', taboos: '', stage: '', goal: '',
     },
-    history: [], // {role:'her'|'me'|'note', text, ts}
+    history: [],          // {role:'her'|'me'|'note', text, ts}
+    dashboard: null,      // 缓存的分析结果
+    dashboardTs: 0,
+    imports: '',          // 历史聊天原文
   };
 }
