@@ -2,13 +2,14 @@
 import React, { useEffect, useState, useRef, useMemo } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, ScrollView, TextInput, ActivityIndicator,
-  Alert, Dimensions, Image,
+  Alert, Dimensions, Image, StatusBar, Platform, PanResponder,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as Clipboard from 'expo-clipboard';
 import Settings from './src/components/Settings';
 import {
   loadSettings, saveSettings, loadGirls, saveGirls, newGirl,
+  loadCopied, subscribeCopied, recordCopy,
 } from './src/lib/storage';
 import {
   buildSystem, buildUser, parseReplies, parseDashboard, parseProfile, historyBlock,
@@ -22,9 +23,9 @@ const TABS = [
   { key: 'icebreak', label: '破冰', icon: '🧊' },
   { key: 'soul', label: 'Soul', icon: '🎯' },
   { key: 'assistant', label: '助手', icon: '🤖' },
-  { key: 'me', label: '我', icon: '👤' },
 ];
 const { width: SW, height: SH } = Dimensions.get('window');
+const TOP = Platform.OS === 'ios' ? 44 : (StatusBar.currentHeight || 0); // 状态栏安全区
 
 export default function App() {
   const [settings, setSettings] = useState(null);
@@ -37,6 +38,14 @@ export default function App() {
   const [nameModal, setNameModal] = useState(null); // {mode:'add'|'rename', id?}
   const [chatGirl, setChatGirl] = useState(null);
   const [localStatus, setLocalStatus] = useState('');
+  const [drawerOpen, setDrawerOpen] = useState(false);
+
+  // 左边缘右滑拉出「我」抽屉（轻点放行，仅拦截横向滑动）
+  const edgePan = useRef(PanResponder.create({
+    onStartShouldSetPanResponder: () => false,
+    onMoveShouldSetPanResponder: (e, g) => Math.abs(g.dx) > 12,
+    onPanResponderMove: (e, g) => { if (g.dx > 40) setDrawerOpen(true); },
+  })).current;
 
   useEffect(() => {
     (async () => {
@@ -121,6 +130,7 @@ export default function App() {
             <TouchableOpacity style={styles.importBtn} onPress={() => setShowImport(true)}>
               <Text style={styles.importBtnText}>📥 导入历史聊天（存入「{girl.name}」）</Text>
             </TouchableOpacity>
+            <ReviewModule />
             <View style={{ height: 24 }} />
           </ScrollView>
         ) : (
@@ -148,13 +158,6 @@ export default function App() {
         </ScrollView>
       )}
 
-      {tab === 'me' && (
-        <ScrollView style={styles.content}>
-          <MePage settings={settings} onOpenSettings={() => setShowSettings(true)} nextResign={nextResign} />
-          <View style={{ height: 24 }} />
-        </ScrollView>
-      )}
-
       {tab === 'assistant' && (
         <AssistantScreen settings={settings} />
       )}
@@ -164,10 +167,28 @@ export default function App() {
           <TouchableOpacity key={t.key} style={styles.tabItem} onPress={() => setTab(t.key)}>
             <Text style={[styles.tabIcon, tab === t.key && styles.tabIconOn]}>{t.icon}</Text>
             <Text style={[styles.tabLabel, tab === t.key && styles.tabLabelOn]}>{t.label}</Text>
-            {t.key === 'me' && redDot && <View style={styles.dot} />}
           </TouchableOpacity>
         ))}
       </View>
+
+      {/* 左边缘抓手（右滑拉出「我」；红点=需重签） */}
+      <View style={styles.edgeGrabber} {...edgePan.panHandlers}>
+        {redDot && <View style={styles.edgeDot} />}
+      </View>
+
+      {/* 「我」抽屉（从屏幕左边缘右滑进入） */}
+      {drawerOpen && (
+        <View style={styles.drawerMask}
+          onStartShouldSetResponder={() => true}
+          onResponderRelease={() => setDrawerOpen(false)}>
+          <View style={styles.drawerPanel} onStartShouldSetResponder={() => true}>
+            <MePage settings={settings} onOpenSettings={() => setShowSettings(true)} nextResign={nextResign} />
+            <TouchableOpacity style={styles.drawerClose} onPress={() => setDrawerOpen(false)}>
+              <Text style={styles.drawerCloseText}>关闭</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
 
       {showSettings && <Settings settings={settings} onSave={onSaveSettings} onClose={() => setShowSettings(false)} />}
       {showImport && <ImportModal girl={girl} onClose={() => setShowImport(false)} onImport={(h) => { if (girl) updateGirl(girl.id, { history: [...girl.history, ...h] }); setShowImport(false); }} />}
@@ -316,9 +337,21 @@ function Dashboard({ girl, runLLM, updateGirl }) {
       {showNext && d?.next ? <Text style={styles.foldBody}>{d.next}</Text> : null}
 
       <TouchableOpacity style={styles.foldRow} onPress={() => setShowAdvice(!showAdvice)}>
-        <Text style={styles.foldLbl}>▸ 建议 · 补救操作</Text>
+        <Text style={styles.foldLbl}>▸ 建议 · 补救话术（点开可复制）</Text>
       </TouchableOpacity>
-      {showAdvice && d?.advice ? <Text style={styles.foldBody}>{d.advice}</Text> : null}
+      {showAdvice && d?.advice ? (
+        <View>
+          {String(d.advice).split('\n').filter((s) => s.trim()).map((line, i) => (
+            <View key={i} style={styles.adviceLine}>
+              <Text style={styles.adviceText}>{line.trim()}</Text>
+              <TouchableOpacity style={styles.copyBtn}
+                onPress={() => Clipboard.setStringAsync(line.trim()).then(() => { recordCopy(line.trim(), '仪表盘'); Alert.alert('已复制'); })}>
+                <Text style={styles.copyText}>复制</Text>
+              </TouchableOpacity>
+            </View>
+          ))}
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -404,7 +437,7 @@ function QuickReply({ girl, settings, runLLM, onLogHer, onOpenChat }) {
       {replies.map((r, i) => (
         <View key={i} style={styles.reply}>
           <Text style={styles.replyText}>{r.reply}</Text>
-          <TouchableOpacity style={styles.copyBtn} onPress={() => Clipboard.setStringAsync(r.reply).then(() => Alert.alert('已复制'))}>
+          <TouchableOpacity style={styles.copyBtn} onPress={() => Clipboard.setStringAsync(r.reply).then(() => { recordCopy(r.reply, '回复'); Alert.alert('已复制'); })}>
             <Text style={styles.copyText}>复制</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.ideaToggle} onPress={() => setOpenIdx(openIdx === i ? -1 : i)}>
@@ -456,7 +489,7 @@ function ChatView({ girl, settings, runLLM, onLog, onClose }) {
           </View>
         ))}
         {tips.map((t, i) => (
-          <TouchableOpacity key={i} style={styles.tipBubble} onPress={() => Clipboard.setStringAsync(t.reply).then(() => Alert.alert('已复制'))}>
+          <TouchableOpacity key={i} style={styles.tipBubble} onPress={() => Clipboard.setStringAsync(t.reply).then(() => { recordCopy(t.reply, '接着聊'); Alert.alert('已复制'); })}>
             <Text style={styles.tipText}>💡 {t.reply}</Text>
             {t.idea ? <Text style={styles.tipIdea}>策略：{t.idea}</Text> : null}
           </TouchableOpacity>
@@ -503,11 +536,22 @@ function IceBreak({ girl, settings, runLLM, onSave }) {
           {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.btnText}>出方案</Text>}
         </TouchableOpacity>
       </View>
+      <Text style={styles.subHead}>💡 破冰话题库（点一下塞进输入框）</Text>
+      <View style={styles.chipsWrap}>
+        {['旅行', '美食', '宠物', '电影', '健身', '音乐'].map((t) => (
+          <TouchableOpacity key={t} style={styles.topicChip} onPress={() => setText((prev) => (prev ? prev + ' ' + t : t))}>
+            <Text style={styles.topicChipText}>{t}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+      <View style={styles.tipCard}>
+        <Text style={styles.tipCardText}>小贴士：别一上来查户口，从她的兴趣自然切入；开场白≤20字，留个钩子让她接话。</Text>
+      </View>
       {out ? (
         <View style={styles.outBox}>
           <Text style={styles.outText}>{out}</Text>
           <View style={styles.bar}>
-            <TouchableOpacity style={styles.copyAllBtn} onPress={() => Clipboard.setStringAsync(out).then(() => Alert.alert('已复制'))}>
+            <TouchableOpacity style={styles.copyAllBtn} onPress={() => Clipboard.setStringAsync(out).then(() => { recordCopy(out, '破冰'); Alert.alert('已复制'); })}>
               <Text style={styles.copyAllText}>复制全部</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.saveBtn} disabled={!girl} onPress={() => { onSave(out); Alert.alert('已保存', '结果存入「' + girl.name + '」'); }}>
@@ -556,10 +600,21 @@ function SoulView({ girl, settings, runLLM, onSave }) {
           {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.btnText}>分析</Text>}
         </TouchableOpacity>
       </View>
+      <Text style={styles.subHead}>🎯 收号话术模板库（点一下塞进输入框）</Text>
+      <View style={styles.chipsWrap}>
+        {['周末出来喝杯咖啡？', '晚上一起吃个夜宵？', '有空散个步聊聊？'].map((t) => (
+          <TouchableOpacity key={t} style={styles.topicChip} onPress={() => setText((prev) => (prev ? prev + '\n' + t : t))}>
+            <Text style={styles.topicChipText}>{t}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+      <View style={styles.tipCard}>
+        <Text style={styles.tipCardText}>时机提示：她回得快、主动抛梗、深夜还在聊 → 趁热收号；冷战/敷衍时先别收。</Text>
+      </View>
       {replies.length ? replies.map((r, i) => (
         <View key={i} style={styles.reply}>
           <Text style={styles.replyText}>{r.reply}</Text>
-          <TouchableOpacity style={styles.copyBtn} onPress={() => Clipboard.setStringAsync(r.reply).then(() => Alert.alert('已复制'))}>
+          <TouchableOpacity style={styles.copyBtn} onPress={() => Clipboard.setStringAsync(r.reply).then(() => { recordCopy(r.reply, '回复'); Alert.alert('已复制'); })}>
             <Text style={styles.copyText}>复制</Text>
           </TouchableOpacity>
         </View>
@@ -594,6 +649,35 @@ function MePage({ settings, onOpenSettings, nextResign }) {
         <Text style={styles.meRowVal}>{d.getMonth() + 1}月{d.getDate()}日</Text>
       </View>
       <Text style={styles.meNote}>· 数据全部存本机，不联网上传{'\n'}· 每 7 天需重签一次（连电脑 Sideloadly 覆盖装）{'\n'}· 本地专属模型就绪后在设置开启</Text>
+    </View>
+  );
+}
+
+// ===== 回顾：已复制的聊天记录 =====
+function ReviewModule() {
+  const [list, setList] = useState([]);
+  useEffect(() => {
+    loadCopied().then(setList);
+    return subscribeCopied(setList);
+  }, []);
+  if (!list.length) return null;
+  const fmt = (ts) => {
+    const d = new Date(ts);
+    const p = (n) => (n < 10 ? '0' + n : '' + n);
+    return `${d.getMonth() + 1}月${d.getDate()}日 ${p(d.getHours())}:${p(d.getMinutes())}`;
+  };
+  return (
+    <View style={styles.card}>
+      <View style={styles.cardHead}>
+        <Text style={styles.cardTitle}>🕘 回顾 · 已复制的聊天</Text>
+        <Text style={styles.refresh}>最近 {list.length}</Text>
+      </View>
+      {list.slice(0, 12).map((it, i) => (
+        <View key={i} style={styles.reviewItem}>
+          <Text style={styles.reviewText} numberOfLines={3}>{it.text}</Text>
+          <Text style={styles.reviewTime}>{fmt(it.ts)}{it.source ? ' · ' + it.source : ''}</Text>
+        </View>
+      ))}
     </View>
   );
 }
@@ -788,20 +872,20 @@ const C = {
   cardBg: '#fff', green: '#07C160', gray: '#999', line: '#F0F0F0', bg: '#EDEDED',
 };
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: C.bg },
+  root: { flex: 1, backgroundColor: C.bg, paddingTop: TOP },
   loading: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   content: { flex: 1 },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 80 },
-  emptyText: { color: '#888', fontSize: 15 },
-  hint: { color: '#888', fontSize: 13, padding: 12 },
+  emptyText: { color: '#888', fontSize: 16 },
+  hint: { color: '#888', fontSize: 14, padding: 12 },
   card: { backgroundColor: C.cardBg, borderRadius: 12, margin: 10, padding: 12 },
   cardHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
-  cardTitle: { fontSize: 15, fontWeight: '700', color: '#191919' },
+  cardTitle: { fontSize: 16, fontWeight: '700', color: '#191919' },
   refresh: { fontSize: 12, color: '#576B95' },
   aiTag: { borderWidth: 1, borderColor: C.green, borderRadius: 9, paddingVertical: 2, paddingHorizontal: 6 },
-  aiTagText: { fontSize: 9, color: C.green },
+  aiTagText: { fontSize: 10, color: C.green },
   row: { flexDirection: 'row', alignItems: 'center', marginTop: 8 },
-  rowLbl: { fontSize: 12, color: '#999', width: 52 },
+  rowLbl: { fontSize: 13, color: '#999', width: 54 },
   rowVal: { fontSize: 12, color: '#191919', marginLeft: 8 },
   dots: { flexDirection: 'row' },
   dotC: { width: 10, height: 10, borderRadius: 5, backgroundColor: '#E5E5E5', marginRight: 6 },
@@ -809,8 +893,8 @@ const styles = StyleSheet.create({
   barBg: { width: 100, height: 8, borderRadius: 4, backgroundColor: '#EFEFEF', marginLeft: 8 },
   barFg: { height: 8, borderRadius: 4, backgroundColor: C.green },
   foldRow: { marginTop: 10, paddingVertical: 4 },
-  foldLbl: { fontSize: 13, color: '#191919' },
-  foldBody: { fontSize: 13, color: '#444', lineHeight: 20, marginTop: 4 },
+  foldLbl: { fontSize: 14, color: '#191919' },
+  foldBody: { fontSize: 14, color: '#444', lineHeight: 21, marginTop: 4 },
   pfRow: { flexDirection: 'row', alignItems: 'center', marginTop: 8 },
   pfLbl: { fontSize: 12, color: '#999', width: 70 },
   pfInput: { flex: 1, borderWidth: 1, borderColor: '#eee', borderRadius: 8, padding: 8, fontSize: 14, color: '#222', backgroundColor: '#fafafa' },
@@ -824,17 +908,17 @@ const styles = StyleSheet.create({
   btnPrimary: { marginLeft: 'auto', backgroundColor: C.green, borderRadius: 10, paddingVertical: 10, paddingHorizontal: 18 },
   btnText: { color: '#fff', fontWeight: '700' },
   reply: { marginTop: 10, backgroundColor: '#F6F6F6', borderRadius: 10, padding: 10 },
-  replyText: { fontSize: 14, color: '#222', lineHeight: 21 },
+  replyText: { fontSize: 15, color: '#222', lineHeight: 22 },
   copyBtn: { marginTop: 6, alignSelf: 'flex-end', backgroundColor: C.green, borderRadius: 8, paddingVertical: 5, paddingHorizontal: 12 },
-  copyText: { color: '#fff', fontSize: 12 },
+  copyText: { color: '#fff', fontSize: 13 },
   ideaToggle: { marginTop: 4, alignSelf: 'flex-start' },
   ideaToggleText: { fontSize: 11, color: '#576B95' },
   ideaBody: { fontSize: 12, color: '#666', marginTop: 2, fontStyle: 'italic' },
   importBtn: { margin: 10, marginTop: 4, backgroundColor: '#E8F8EE', borderRadius: 10, padding: 12, alignItems: 'center' },
   importBtnText: { color: C.green, fontSize: 13, fontWeight: '600' },
-  tip: { fontSize: 12, color: '#888', lineHeight: 18, marginBottom: 8 },
+  tip: { fontSize: 13, color: '#888', lineHeight: 19, marginBottom: 8 },
   outBox: { marginTop: 10, backgroundColor: '#F6F6F6', borderRadius: 10, padding: 10 },
-  outText: { fontSize: 14, color: '#222', lineHeight: 21 },
+  outText: { fontSize: 15, color: '#222', lineHeight: 22 },
   copyAllBtn: { marginTop: 8, alignSelf: 'flex-end', backgroundColor: C.green, borderRadius: 8, paddingVertical: 6, paddingHorizontal: 14 },
   copyAllText: { color: '#fff', fontSize: 13 },
   saveBtn: { marginTop: 10, backgroundColor: '#576B95', borderRadius: 8, paddingVertical: 8, paddingHorizontal: 14, alignSelf: 'flex-end' },
@@ -842,24 +926,29 @@ const styles = StyleSheet.create({
   chips: { maxHeight: 50, paddingHorizontal: 8, paddingVertical: 6, backgroundColor: C.bg },
   chip: { paddingHorizontal: 16, paddingVertical: 7, borderRadius: 16, backgroundColor: '#fff', marginRight: 8, borderWidth: 1, borderColor: '#E0E0E0' },
   chipOn: { backgroundColor: C.green, borderColor: C.green },
-  chipText: { color: '#444', fontSize: 14 },
+  chipText: { color: '#444', fontSize: 15 },
   chipTextOn: { color: '#fff', fontWeight: '700' },
   chipAdd: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 16, borderWidth: 1, borderColor: C.green },
   chipAddText: { color: C.green, fontSize: 14 },
-  tabbar: { flexDirection: 'row', backgroundColor: '#fff', borderTopWidth: 1, borderTopColor: '#E5E5E5', paddingBottom: 8, paddingTop: 6 },
+  tabbar: { flexDirection: 'row', backgroundColor: '#fff', borderTopWidth: 1, borderTopColor: '#E5E5E5', paddingBottom: 20, paddingTop: 8 },
   tabItem: { flex: 1, alignItems: 'center', paddingVertical: 4, position: 'relative' },
-  tabIcon: { fontSize: 18, color: '#999' },
+  tabIcon: { fontSize: 26, color: '#999' },
   tabIconOn: { color: C.green },
-  tabLabel: { fontSize: 11, color: '#999' },
+  tabLabel: { fontSize: 12, color: '#999', marginTop: 2 },
   tabLabelOn: { color: C.green, fontWeight: '700' },
-  dot: { position: 'absolute', top: 2, right: '28%', width: 8, height: 8, borderRadius: 4, backgroundColor: '#FA5151' },
+  edgeGrabber: { position: 'absolute', top: TOP, left: 0, bottom: 0, width: 22, zIndex: 25 },
+  edgeDot: { position: 'absolute', top: 80, left: 4, width: 9, height: 9, borderRadius: 5, backgroundColor: '#FA5151' },
+  drawerMask: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.35)', zIndex: 40 },
+  drawerPanel: { position: 'absolute', top: 0, bottom: 0, left: 0, width: 320, backgroundColor: C.bg, paddingTop: TOP + 8, paddingHorizontal: 14, paddingBottom: 20 },
+  drawerClose: { marginTop: 16, backgroundColor: '#fff', borderRadius: 10, paddingVertical: 12, alignItems: 'center' },
+  drawerCloseText: { color: '#555', fontSize: 15 },
   meHead: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
   avatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: C.green, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
   avatarText: { color: '#fff', fontSize: 18, fontWeight: '700' },
-  meName: { fontSize: 16, fontWeight: '700', color: '#191919' },
-  meSub: { fontSize: 11, color: '#999', marginTop: 2 },
-  meRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12, borderTopWidth: 1, borderTopColor: C.line },
-  meRowLbl: { fontSize: 14, color: '#222' },
+  meName: { fontSize: 17, fontWeight: '700', color: '#191919' },
+  meSub: { fontSize: 12, color: '#999', marginTop: 2 },
+  meRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 14, borderTopWidth: 1, borderTopColor: C.line },
+  meRowLbl: { fontSize: 15, color: '#222' },
   meRowVal: { fontSize: 13, color: '#999' },
   meRowArrow: { fontSize: 18, color: '#ccc' },
   meNote: { marginTop: 12, fontSize: 12, color: '#888', lineHeight: 20 },
@@ -905,12 +994,26 @@ const styles = StyleSheet.create({
   // 锁定页
   lockRoot: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#F2F2F2', zIndex: 30 },
   crashCard: { position: 'absolute', top: '38%', left: 30, right: 30, backgroundColor: '#fff', borderRadius: 14, padding: 24, alignItems: 'center', shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 8 },
-  crashTitle: { fontSize: 17, fontWeight: '700', color: '#191919', marginBottom: 10 },
-  crashText: { fontSize: 13, color: '#666', textAlign: 'center', lineHeight: 20 },
+  crashTitle: { fontSize: 18, fontWeight: '700', color: '#191919', marginBottom: 10 },
+  crashText: { fontSize: 14, color: '#666', textAlign: 'center', lineHeight: 21 },
   crashBtn: { marginTop: 18, backgroundColor: '#07C160', borderRadius: 8, paddingVertical: 8, paddingHorizontal: 30 },
   crashBtnText: { color: '#fff', fontSize: 14 },
   gestureLayer: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
   zoneHint: { position: 'absolute', backgroundColor: 'rgba(0,0,0,0.06)', borderRadius: 10, paddingVertical: 10, paddingHorizontal: 16 },
   zoneHintText: { fontSize: 13, color: '#bbb', fontWeight: '700' },
   hintSmall: { position: 'absolute', bottom: 20, left: 0, right: 0, textAlign: 'center', fontSize: 12, color: '#999' },
+  // 通用小标题（填充图标）
+  subHead: { fontSize: 14, fontWeight: '700', color: '#191919', marginTop: 14, marginBottom: 8 },
+  chipsWrap: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 4 },
+  topicChip: { backgroundColor: '#F2F2F2', borderRadius: 16, paddingVertical: 9, paddingHorizontal: 14, marginRight: 8, marginBottom: 8 },
+  topicChipText: { fontSize: 14, color: '#444' },
+  tipCard: { backgroundColor: '#FFF8E6', borderRadius: 10, padding: 12, marginTop: 6, borderWidth: 1, borderColor: '#F3E2B0' },
+  tipCardText: { fontSize: 13, color: '#8A6D00', lineHeight: 20 },
+  // 仪表盘建议行（可复制）
+  adviceLine: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F6F6F6', borderRadius: 8, padding: 8, marginTop: 6 },
+  adviceText: { flex: 1, fontSize: 14, color: '#222', lineHeight: 20 },
+  // 回顾模块
+  reviewItem: { backgroundColor: '#F6F6F6', borderRadius: 8, padding: 10, marginTop: 8 },
+  reviewText: { fontSize: 14, color: '#222', lineHeight: 20 },
+  reviewTime: { fontSize: 11, color: '#999', marginTop: 4 },
 });

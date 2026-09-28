@@ -51,6 +51,31 @@ export async function saveGirls(girls) {
   await AsyncStorage.setItem(GIRLS_KEY, JSON.stringify(girls));
 }
 
+// ===== 已复制记录（回顾模块）=====
+const COPIED_KEY = 'ec_copied';
+let copiedListeners = [];
+export function subscribeCopied(cb) {
+  copiedListeners.push(cb);
+  return () => { copiedListeners = copiedListeners.filter((x) => x !== cb); };
+}
+export async function recordCopy(text, source) {
+  if (!text || !text.trim()) return;
+  try {
+    const raw = await AsyncStorage.getItem(COPIED_KEY);
+    const list = raw ? JSON.parse(raw) : [];
+    list.unshift({ text: text.trim(), source: source || '', ts: Date.now() });
+    const capped = list.slice(0, 60);
+    await AsyncStorage.setItem(COPIED_KEY, JSON.stringify(capped));
+    copiedListeners.forEach((cb) => cb(capped));
+  } catch { /* ignore */ }
+}
+export async function loadCopied() {
+  try {
+    const raw = await AsyncStorage.getItem(COPIED_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch { return []; }
+}
+
 export function newGirl(name) {
   return {
     id: 'g_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
