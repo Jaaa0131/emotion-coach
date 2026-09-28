@@ -1,8 +1,8 @@
 // App.jsx —— 情感教练 v3（微信风 / 暗门伪装 / 关系仪表盘 / 破冰 / Soul / 连续对话）
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useMemo } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, ScrollView, TextInput, ActivityIndicator,
-  PanResponder, Alert, Dimensions, Image,
+  Alert, Dimensions, Image,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as Clipboard from 'expo-clipboard';
@@ -94,7 +94,7 @@ export default function App() {
 
   return (
     <View style={styles.root}>
-      {settings.disguiseOn && !unlocked && <LockScreen onUnlock={() => setUnlocked(true)} />}
+      {settings.disguiseOn && !unlocked && <LockScreen onUnlock={() => setUnlocked(true)} cfg={settings.unlock} />}
 
       {showGirlTabs && (
         <GirlTabs girls={girls} selId={selId} onSelect={setSelId}
@@ -183,64 +183,58 @@ export default function App() {
   );
 }
 
-// ===== 暗门锁定页：伪装成崩溃报错，画＋ + 右下角3连点解锁 =====
-function LockScreen({ onUnlock }) {
-  const [pts, setPts] = useState([]);
-  const [drew, setDrew] = useState(false);
-  const [taps, setTaps] = useState(0);
-  const ptsRef = useRef([]); // 用 ref 实时存轨迹，避免 release 时读到旧的 state
-  const pan = useRef(PanResponder.create({
-    onStartShouldSetPanResponder: () => true,
-    onMoveShouldSetPanResponder: () => true,
-    onPanResponderMove: (e, g) => {
-      const { pageX, pageY } = g;
-      const next = [...ptsRef.current, { x: pageX, y: pageY }].slice(-80);
-      ptsRef.current = next;
-      setPts(next);
-    },
-    onPanResponderRelease: () => {
-      const arr = ptsRef.current;
-      if (arr.length < 6) return;
-      const xs = arr.map((p) => p.x), ys = arr.map((p) => p.y);
-      const w = Math.max(...xs) - Math.min(...xs);
-      const h = Math.max(...ys) - Math.min(...ys);
-      const cx = SW / 2, cy = SH / 2;
-      const nearCenter = arr.some((p) => Math.abs(p.x - cx) < 90 && Math.abs(p.y - cy) < 90);
-      // 横向笔画够长 + 纵向笔画够长 + 经过中心 = 像「＋」
-      if (w > SW * 0.3 && h > SH * 0.25 && nearCenter) {
-        setDrew(true);
-      } else {
-        ptsRef.current = []; setPts([]); setDrew(false); setTaps(0);
-      }
-    },
-  })).current;
+// ===== 暗门锁定页：伪装成崩溃报错，左上点 N 次 → 右下点 M 次（严格顺序，乱按不解锁）=====
+function LockScreen({ onUnlock, cfg }) {
+  const tl = (cfg && cfg.tl) || 2;
+  const br = (cfg && cfg.br) || 3;
+  const expected = useMemo(() => [...Array(tl).fill('TL'), ...Array(br).fill('BR')], [tl, br]);
+  const [idx, setIdx] = useState(0); // 当前已正确匹配的步数
 
-  const onTap = () => {
-    if (!drew) return;
-    const n = taps + 1;
-    setTaps(n);
-    if (n >= 3) onUnlock();
+  const tap = (zone) => {
+    if (zone === expected[idx]) {
+      const n = idx + 1;
+      if (n >= expected.length) onUnlock();
+      else setIdx(n);
+    } else {
+      setIdx(0); // 任何错序、错区、乱按都清零重来
+    }
   };
+
+  const tlDone = Math.min(idx, tl);
+  const brDone = Math.max(0, idx - tl);
 
   return (
     <View style={styles.lockRoot}>
-      {/* 崩溃报错卡（不显示任何 App 内容） */}
-      <View style={styles.crashCard}>
+      {/* 崩溃报错卡（纯展示，不可点） */}
+      <View style={styles.crashCard} pointerEvents="none">
         <Text style={styles.crashTitle}>SnapBridge 已停止运行</Text>
         <Text style={styles.crashText}>很抱歉，应用发生错误并已关闭。{'\n'}请稍后重试。</Text>
-        <TouchableOpacity style={styles.crashBtn} onPress={() => {}}>
+        <View style={styles.crashBtn}>
           <Text style={styles.crashBtnText}>关闭</Text>
-        </TouchableOpacity>
+        </View>
       </View>
 
-      {/* 手势层 */}
-      <View style={styles.gestureLayer} {...pan.panHandlers}>
-        {pts.map((p, i) => <View key={i} style={[styles.gp, { left: p.x - 3, top: p.y - 3 }]} />)}
-      </View>
-
-      {/* 右下角点按区 */}
-      <TouchableOpacity style={styles.brTap} onPress={onTap} activeOpacity={1} />
-      {drew && <Text style={styles.hintSmall}>再连点右下角 {Math.max(0, 3 - taps)} 次</Text>}
+      {/* 全部屏幕捕获点按；左上/右下/其它区分别判定 */}
+      <TouchableOpacity style={styles.gestureLayer} activeOpacity={1}
+        onPress={(e) => {
+          const { locationX, locationY } = e.nativeEvent;
+          let zone = 'OTHER';
+          if (locationX < SW * 0.4 && locationY < SH * 0.4) zone = 'TL';
+          else if (locationX > SW * 0.6 && locationY > SH * 0.6) zone = 'BR';
+          tap(zone);
+        }}>
+        {/* 左上/右下视觉提示区 */}
+        <View style={[styles.zoneHint, { top: 30, left: 30 }]}>
+          <Text style={styles.zoneHintText}>左上 {tlDone}/{tl}</Text>
+        </View>
+        <View style={[styles.zoneHint, { bottom: 30, right: 30 }]}>
+          <Text style={styles.zoneHintText}>右下 {brDone}/{br}</Text>
+        </View>
+        {idx > 0 && idx < expected.length &&
+          <Text style={styles.hintSmall}>
+            {idx <= tl ? `继续点左上（${tlDone}/${tl}）` : `现在点右下（${brDone}/${br}）`}
+          </Text>}
+      </TouchableOpacity>
     </View>
   );
 }
@@ -916,7 +910,7 @@ const styles = StyleSheet.create({
   crashBtn: { marginTop: 18, backgroundColor: '#07C160', borderRadius: 8, paddingVertical: 8, paddingHorizontal: 30 },
   crashBtnText: { color: '#fff', fontSize: 14 },
   gestureLayer: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
-  gp: { position: 'absolute', width: 6, height: 6, borderRadius: 3, backgroundColor: 'rgba(7,193,96,0.5)' },
-  brTap: { position: 'absolute', right: 0, bottom: 0, width: '40%', height: '25%' },
+  zoneHint: { position: 'absolute', backgroundColor: 'rgba(0,0,0,0.06)', borderRadius: 10, paddingVertical: 10, paddingHorizontal: 16 },
+  zoneHintText: { fontSize: 13, color: '#bbb', fontWeight: '700' },
   hintSmall: { position: 'absolute', bottom: 20, left: 0, right: 0, textAlign: 'center', fontSize: 12, color: '#999' },
 });

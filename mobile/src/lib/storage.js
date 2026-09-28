@@ -13,6 +13,10 @@ export const DEFAULT_SETTINGS = {
   visionModel: 'glm-4v-flash',
   disguiseOn: true,         // 暗门/伪装开关（默认开，桌面显示 SnapBridge）
   resignDate: 0,            // 上次重签时间（用于 7 天红点提醒）
+  unlock: {                 // 暗门解锁方式（严格顺序，任何乱按都不解锁）
+    tl: 2,                  // 左上区域点击次数
+    br: 3,                  // 右下区域点击次数
+  },
 };
 
 export async function loadSettings() {
