@@ -5,8 +5,9 @@ const GIRLS_KEY = 'ec_girls';
 const SETTINGS_KEY = 'ec_settings';
 
 export const DEFAULT_SETTINGS = {
-  useLocal: false,          // 是否用本地微调模型（需先下载）
-  modelUrl: '',             // 本地 GGUF 模型下载地址（你托管的可公网访问 URL）
+  useLocal: false,          // 是否用本地微调模型（文件共享拷入 或 联网下载）
+  modelUrl: '',             // 本地 GGUF 下载地址（可留空；用 Finder 文件共享拷入时无需填）
+  modelFile: 'coach-qwen3b-q8_0.gguf', // 文件共享拷入时，App 文档目录里的模型文件名
   apiBase: 'https://open.bigmodel.cn/api/paas/v4', // 智谱兼容 OpenAI 接口
   apiKey: '',               // 智谱 API Key（免费）
   cloudModel: 'glm-4-air',  // 默认用 air，比 flash 聪明

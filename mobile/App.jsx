@@ -12,20 +12,21 @@ import {
   loadCopied, subscribeCopied, recordCopy,
 } from './src/lib/storage';
 import {
-  buildSystem, buildUser, parseReplies, parseDashboard, parseProfile, historyBlock,
+  buildSystem, buildUser, parseReplies, parseDashboard, parseProfile, historyBlock, parseHealth,
   ASSISTANT_SYSTEM, ASSISTANT_VISION_PROMPT, parseAssistant,
 } from './src/lib/prompt';
 import { generate, ensureLocal, isLocalReady } from './src/lib/llm';
 import { analyzeImage, recognizeImage, MOMENT_EXTRACT_PROMPT } from './src/lib/ocr';
+import Icon from './src/components/Icon';
 
 const TABS = [
-  { key: 'messages', label: '消息', icon: '💬' },
-  { key: 'icebreak', label: '破冰', icon: '🧊' },
-  { key: 'soul', label: 'Soul', icon: '🎯' },
-  { key: 'assistant', label: '助手', icon: '🤖' },
+  { key: 'messages', label: '消息', icon: 'message' },
+  { key: 'icebreak', label: '破冰', icon: 'ice' },
+  { key: 'soul', label: 'Soul', icon: 'soul' },
+  { key: 'assistant', label: '助手', icon: 'assistant' },
 ];
 const { width: SW, height: SH } = Dimensions.get('window');
-const TOP = Platform.OS === 'ios' ? 44 : (StatusBar.currentHeight || 0); // 状态栏安全区
+const TOP = Platform.OS === 'ios' ? 64 : ((StatusBar.currentHeight || 0) + 16); // 状态栏/灵动岛安全区（避开灵动岛并留余量）
 
 export default function App() {
   const [settings, setSettings] = useState(null);
@@ -99,7 +100,7 @@ export default function App() {
   const daysLeft = (nextResign - Date.now()) / 86400000;
   const redDot = daysLeft <= 1;
 
-  const showGirlTabs = ['messages', 'icebreak', 'soul'].includes(tab) && girls.length > 0;
+  const showGirlTabs = ['messages', 'icebreak', 'soul'].includes(tab);
 
   return (
     <View style={styles.root}>
@@ -114,6 +115,7 @@ export default function App() {
         girl ? (
           <ScrollView style={styles.content}>
             <Dashboard girl={girl} runLLM={runLLM} updateGirl={updateGirl} />
+            <ChatHealth girl={girl} runLLM={runLLM} />
             <ProfileCard girl={girl} onChange={(p) => updateGirl(girl.id, { profile: p })}
               onExtract={async () => {
                 if (!girl.history.length) { Alert.alert('暂无聊天', '先在快速回复里粘贴一些对话，或导入历史聊天'); return; }
@@ -165,7 +167,7 @@ export default function App() {
       <View style={styles.tabbar}>
         {TABS.map((t) => (
           <TouchableOpacity key={t.key} style={styles.tabItem} onPress={() => setTab(t.key)}>
-            <Text style={[styles.tabIcon, tab === t.key && styles.tabIconOn]}>{t.icon}</Text>
+            <Icon name={t.icon} size={26} color={tab === t.key ? C.green : '#999'} />
             <Text style={[styles.tabLabel, tab === t.key && styles.tabLabelOn]}>{t.label}</Text>
           </TouchableOpacity>
         ))}
@@ -536,7 +538,10 @@ function IceBreak({ girl, settings, runLLM, onSave }) {
           {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.btnText}>出方案</Text>}
         </TouchableOpacity>
       </View>
-      <Text style={styles.subHead}>💡 破冰话题库（点一下塞进输入框）</Text>
+      <View style={styles.subHeadRow}>
+        <Icon name="topic" size={18} color={C.green} />
+        <Text style={styles.subHead}>破冰话题库（点一下塞进输入框）</Text>
+      </View>
       <View style={styles.chipsWrap}>
         {['旅行', '美食', '宠物', '电影', '健身', '音乐'].map((t) => (
           <TouchableOpacity key={t} style={styles.topicChip} onPress={() => setText((prev) => (prev ? prev + ' ' + t : t))}>
@@ -600,7 +605,10 @@ function SoulView({ girl, settings, runLLM, onSave }) {
           {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.btnText}>分析</Text>}
         </TouchableOpacity>
       </View>
-      <Text style={styles.subHead}>🎯 收号话术模板库（点一下塞进输入框）</Text>
+      <View style={styles.subHeadRow}>
+        <Icon name="template" size={18} color={C.green} />
+        <Text style={styles.subHead}>收号话术模板库（点一下塞进输入框）</Text>
+      </View>
       <View style={styles.chipsWrap}>
         {['周末出来喝杯咖啡？', '晚上一起吃个夜宵？', '有空散个步聊聊？'].map((t) => (
           <TouchableOpacity key={t} style={styles.topicChip} onPress={() => setText((prev) => (prev ? prev + '\n' + t : t))}>
@@ -669,7 +677,8 @@ function ReviewModule() {
   return (
     <View style={styles.card}>
       <View style={styles.cardHead}>
-        <Text style={styles.cardTitle}>🕘 回顾 · 已复制的聊天</Text>
+        <Icon name="review" size={18} color={C.green} />
+        <Text style={styles.cardTitle}>回顾 · 已复制的聊天</Text>
         <Text style={styles.refresh}>最近 {list.length}</Text>
       </View>
       {list.slice(0, 12).map((it, i) => (
@@ -678,6 +687,38 @@ function ReviewModule() {
           <Text style={styles.reviewTime}>{fmt(it.ts)}{it.source ? ' · ' + it.source : ''}</Text>
         </View>
       ))}
+    </View>
+  );
+}
+
+// ===== 聊天体检：基于近期聊天给健康度/风险/行动 =====
+function ChatHealth({ girl, runLLM }) {
+  const [loading, setLoading] = useState(false);
+  const [res, setRes] = useState(null);
+  const run = async () => {
+    if (!girl?.history?.length) { Alert.alert('暂无聊天', '先在快速回复里粘贴一些对话，或导入历史聊天'); return; }
+    setLoading(true);
+    try {
+      const out = await runLLM({ scene: 'health', g: girl });
+      setRes(parseHealth(out));
+    } catch (e) { Alert.alert('体检失败', e.message); }
+    finally { setLoading(false); }
+  };
+  const color = !res ? '#888' : res.health === '高' ? '#07C160' : res.health === '中' ? '#FF9F0A' : '#FA5151';
+  return (
+    <View style={styles.card}>
+      <TouchableOpacity style={styles.cardHead} onPress={run} disabled={loading} activeOpacity={0.7}>
+        <Icon name="tip" size={18} color={C.green} />
+        <Text style={styles.cardTitle}>聊天体检</Text>
+        <Text style={styles.refresh}>{loading ? '体检中…' : (res ? '↻ 重测' : '点我体检')}</Text>
+      </TouchableOpacity>
+      {res && (
+        <View style={{ marginTop: 4 }}>
+          <Text style={[styles.healthVal, { color }]}>健康度：{res.health}（{res.healthNum}）</Text>
+          {res.risk ? <Text style={styles.healthLine}>⚠️ 近期风险：{res.risk}</Text> : null}
+          {res.do ? <Text style={styles.healthLine}>✅ 该做的一件事：{res.do}</Text> : null}
+        </View>
+      )}
     </View>
   );
 }
@@ -880,6 +921,8 @@ const styles = StyleSheet.create({
   hint: { color: '#888', fontSize: 14, padding: 12 },
   card: { backgroundColor: C.cardBg, borderRadius: 12, margin: 10, padding: 12 },
   cardHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
+  healthVal: { fontSize: 15, fontWeight: '700', color: '#191919', marginBottom: 4 },
+  healthLine: { fontSize: 13, color: '#444', lineHeight: 20, marginTop: 2 },
   cardTitle: { fontSize: 16, fontWeight: '700', color: '#191919' },
   refresh: { fontSize: 12, color: '#576B95' },
   aiTag: { borderWidth: 1, borderColor: C.green, borderRadius: 9, paddingVertical: 2, paddingHorizontal: 6 },
@@ -1004,6 +1047,7 @@ const styles = StyleSheet.create({
   hintSmall: { position: 'absolute', bottom: 20, left: 0, right: 0, textAlign: 'center', fontSize: 12, color: '#999' },
   // 通用小标题（填充图标）
   subHead: { fontSize: 14, fontWeight: '700', color: '#191919', marginTop: 14, marginBottom: 8 },
+  subHeadRow: { flexDirection: 'row', alignItems: 'center', marginTop: 14, marginBottom: 8, gap: 6 },
   chipsWrap: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 4 },
   topicChip: { backgroundColor: '#F2F2F2', borderRadius: 16, paddingVertical: 9, paddingHorizontal: 14, marginRight: 8, marginBottom: 8 },
   topicChipText: { fontSize: 14, color: '#444' },

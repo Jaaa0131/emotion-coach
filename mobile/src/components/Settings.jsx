@@ -50,7 +50,8 @@ export default function Settings({ settings, onSave, onClose }) {
             <Text style={[styles.switch, s.useLocal && styles.switchOn]}>{s.useLocal ? '开' : '关'}</Text>
           </TouchableOpacity>
           <TextInput style={styles.input} value={s.modelUrl}
-            placeholder="https://.../coach-qwen3b-q4_k_m.gguf" onChangeText={(t) => set('modelUrl', t)} />
+            placeholder="https://.../coach-qwen3b-q8_0.gguf（可留空）" onChangeText={(t) => set('modelUrl', t)} />
+          <Text style={styles.note}>把 coach-qwen3b-q8_0.gguf 用电脑 Finder（或 iTunes）拖进 App 的“文件共享”后，开启上方开关即可纯本地离线使用；不想拷文件也可填下载地址。</Text>
 
           <Text style={styles.label}>暗门 / 伪装（关闭方式）</Text>
           <TouchableOpacity style={styles.switchRow} onPress={() => set('disguiseOn', !s.disguiseOn)}>
