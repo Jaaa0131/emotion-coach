@@ -106,16 +106,21 @@ export function buildSystem(girl, scene, opts = {}) {
 
   if (scene === 'reply') {
     let task =
-      '【任务】用户会贴出和女生的对话(她的话，或"女生：… 我：…"格式)。给出3条风格不同、可直接复制发送的微信回复。\n' +
-      '每条严格按下面格式输出（回复内容一行，思路一行）：\n' +
-      '①\n回复：<一条可直接发送的话>\n思路：<不超过10个字，说明这条的策略>\n\n' +
-      '②\n回复：…\n思路：…\n\n③\n回复：…\n思路：…\n' +
-      '① 顺着聊：自然接住她的话，让她好接\n② 调侃/推拉：轻微逗她或反转框架，别过头\n③ 关心+钩子：落到具体的小事上，结尾留个她好回答的问题';
+      '【任务】用户贴出她说的话(或"女生：… 我：…"格式)。给出 3 组可直接照抄的对话示范，每组是一小段真实微信来回。\n' +
+      '严格按下面格式输出，一行一条，不要多余解释、不要编号讲道理：\n' +
+      '【方案1】\n' +
+      '她：<把她刚说的原话抄在这里；也可写她接下来可能接的话，允许连续多行>\n' +
+      '我：<我该回的话，8~20字，可直接复制发送；允许连续多行连发>\n' +
+      '思路：<不超过12字>\n' +
+      '【方案2】\n她：<…>\n我：<…>\n思路：<…>\n' +
+      '【方案3】\n她：<…>\n我：<…>\n思路：<…>\n' +
+      '三组风格必须不同：方案1 顺着聊（自然接住，让她好接）；方案2 调侃/推拉（轻微逗她或反转框架，别过头）；方案3 关心+钩子（落到具体小事，结尾留个她好回答的问题）。\n' +
+      '"她："后面只写她的话（照抄用户贴的原文，或推演她可能的回应），"我："后面只写用户能直接发出去的微信短句——两边都允许连发好几条，不要写死成一对一。';
     if (opts.noReply) {
       task +=
-        '\n特别注意：用户标记了"她还没回"。在3条回复之前，先给一段：她没回的可能原因(1句) + 现在该不该发 + 隔多久发 + 一条低压迫感的生活钩子(≤20字)。绝不追问"为什么不回"。';
+        '\n特别注意：用户标记了"她还没回"。在 3 组方案之前，先给一段：她没回的可能原因(1句) + 现在该不该发 + 隔多久发 + 一条低压迫感的生活钩子(≤20字)。绝不追问"为什么不回"。';
     }
-    task += '\n\n【语气红线】回复里一个字都不要出现"首先/其次/总之/建议您可以/作为一个AI/请问/您好/希望对你有帮助"。严格照上面范例的口吻，像真人微信。';
+    task += '\n\n【语气红线】"我："后面一个字都不要出现"首先/其次/总之/建议您可以/作为一个AI/请问/您好/希望对你有帮助"。严格照上面范例的口吻，像真人微信。';
     return [base, style, profile, history, CORE_PRINCIPLES, task, FEW_SHOT].join('\n\n');
   }
 
@@ -134,7 +139,10 @@ export function buildSystem(girl, scene, opts = {}) {
       '2) 切入点(2~3个)：从她的动态/兴趣里挖出的具体话题点。\n' +
       '3) 开场白(3条，可直接发送)：每条不超过20字；评论具体的东西或提具体的事；\n' +
       '   结尾留钩子；绝不自我介绍、绝不查户口、绝不用"你好/在吗/交个朋友"。\n' +
-      '每条开场白后单独一行"钩子：xx"(不超过10个字)。';
+      '4) 最后必须输出 3 组对话示范（左右分区用），严格按此格式，一行一条：\n' +
+      '【方案1】\n她：<她可能怎么回，可省略这行>\n我：<开场白，≤20字，可直接发送>\n思路：<≤10字>\n' +
+      '【方案2】\n她：<…>\n我：<…>\n思路：<…>\n' +
+      '【方案3】\n她：<…>\n我：<…>\n思路：<…>';
     return [base, style, CORE_PRINCIPLES, task].join('\n\n');
   }
 
@@ -145,7 +153,11 @@ export function buildSystem(girl, scene, opts = {}) {
       '2) 收号时机：给"能要/再等等/该撤"其中一个 + 理由(1句话)。\n' +
       '3) 回复(3条，可直接发送)：按铁律写短句。若判断"能要"，第3条直接换成自然的要微信话术\n' +
       '   (别硬要，给她一个加你的理由，比如"发你那个店的位置")。每条后单独一行"技巧：xx"。\n' +
-      '4) 节奏提醒(1句话)。';
+      '4) 节奏提醒(1句话)。\n' +
+      '5) 最后必须输出 3 组对话示范（左右分区用），严格按此格式，一行一条：\n' +
+      '【方案1】\n她：<她说过的话或她可能接的话，可连续多行>\n我：<我该回的话，可直接发送，可连续多行>\n思路：<≤10字>\n' +
+      '【方案2】\n她：<…>\n我：<…>\n思路：<…>\n' +
+      '【方案3】\n她：<…>\n我：<…>\n思路：<…>';
     return [base, style, CORE_PRINCIPLES, task].join('\n\n');
   }
 
@@ -212,11 +224,57 @@ export function parseReplies(text) {
   return items;
 }
 
+// 取"标记行"的内容：支持多行（一直到下一个标记行或结尾），修掉以前只读第一行把 2)3) 吞掉的问题
+function getBlock(text, key, allKeys) {
+  const others = allKeys.filter((k) => k !== key).join('|');
+  const re = new RegExp('^\\s*' + key + '\\s*[:：]\\s*([\\s\\S]*?)(?=^\\s*(?:' + others + ')\\s*[:：]|$)', 'im');
+  const m = String(text || '').match(re);
+  return m ? m[1].trim() : '';
+}
+
+// ===== 左右对话体解析：她：/我： → 气泡流（支持同一方连发多条）=====
+// 返回 [{ items:[{role:'her'|'me', text}], idea:'…' }, ...]
+export function parseScriptGroups(text) {
+  const lines = String(text || '').split('\n');
+  const groups = [];
+  let cur = null;
+  const ensure = () => { if (!cur) cur = { items: [], idea: '' }; return cur; };
+  for (const raw of lines) {
+    const line = raw.trim();
+    if (!line) continue;
+    // 去掉行首可能的序号/符号，便于容错：如 "- 我：…" "1. 我：…"
+    const clean = line.replace(/^[-•*\d]+[.、)）]?\s*/, '').trim();
+    if (/^【?\s*方案\s*\d/.test(clean) || /^#{1,3}\s*方案/.test(clean)) {
+      if (cur && cur.items.length) groups.push(cur);
+      cur = { items: [], idea: '' };
+      continue;
+    }
+    let m = clean.match(/^(她|对方|女生|妹子)\s*[:：]\s*(.+)$/);
+    if (m) { ensure().items.push({ role: 'her', text: m[2].trim() }); continue; }
+    m = clean.match(/^我\s*[:：]\s*(.+)$/);
+    if (m) { ensure().items.push({ role: 'me', text: m[1].trim() }); continue; }
+    m = clean.match(/^(思路|技巧|策略|钩子)\s*[:：]\s*(.+)$/);
+    if (m) {
+      const g = ensure();
+      g.idea = g.idea ? g.idea + '；' + m[2].trim() : m[2].trim();
+      continue;
+    }
+  }
+  if (cur && cur.items.length) groups.push(cur);
+  return groups;
+}
+
+// 把一段输出拆成「正文分析」+「对话方案组」（破冰/Soul 用：上面看分析，下面看左右气泡）
+export function splitScriptText(text) {
+  const src = String(text || '');
+  const m = src.match(/【\s*方案\s*\d|^\s*[-•*\d]+[.、)）]?\s*她\s*[:：]|^\s*她\s*[:：]|^\s*我\s*[:：]/m);
+  if (!m || typeof m.index !== 'number') return { body: src.trim(), groups: [] };
+  return { body: src.slice(0, m.index).trim(), groups: parseScriptGroups(src.slice(m.index)) };
+}
+
 export function parseDashboard(text) {
-  const get = (key) => {
-    const m = text.match(new RegExp(key + '\\s*[:：]\\s*([^\\n]*)', 'i'));
-    return m ? m[1].trim() : '';
-  };
+  const KEYS = ['STAGE', 'INTEREST', 'MINE', 'NEXT', 'ADVICE'];
+  const get = (key) => getBlock(text, key, KEYS);
   const stageRaw = get('STAGE');
   const interestRaw = get('INTEREST');
   const stageNum = parseInt((stageRaw.match(/\|(\d)/) || [])[1] || '0', 10);

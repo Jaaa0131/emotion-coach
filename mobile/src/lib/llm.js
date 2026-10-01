@@ -22,7 +22,7 @@ export async function ensureLocal(settings) {
     try { localExists = (await FileSystem.getInfoAsync(localUri)).exists; } catch {}
     if (localExists) {
       const localPath = docDir.replace(/^file:\/\//, '') + modelFile; // llama.rn 需要真实路径而非 file:// URI
-      ctx = await initLlama({ model: localPath, n_ctx: 2048, n_gpu_layers: 99, use_mlock: true });
+      ctx = await initLlama({ model: localPath, n_ctx: 1024, n_gpu_layers: 99, use_mlock: false });
       localReady = true;
       return true;
     }
@@ -30,7 +30,7 @@ export async function ensureLocal(settings) {
     if (settings.modelUrl) {
       const { downloadModel } = require('llama.rn');
       const path = await downloadModel(settings.modelUrl);
-      ctx = await initLlama({ model: path, n_ctx: 2048, n_gpu_layers: 99, use_mlock: true });
+      ctx = await initLlama({ model: path, n_ctx: 1024, n_gpu_layers: 99, use_mlock: false });
       localReady = true;
       return true;
     }

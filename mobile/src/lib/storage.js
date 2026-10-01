@@ -52,6 +52,18 @@ export async function saveGirls(girls) {
   await AsyncStorage.setItem(GIRLS_KEY, JSON.stringify(girls));
 }
 
+// ===== 助手页聊天记录（切换 Tab / 重启都不丢）=====
+const ASSISTANT_KEY = 'ec_assistant';
+export async function loadAssistant() {
+  try {
+    const raw = await AsyncStorage.getItem(ASSISTANT_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch { return null; }
+}
+export async function saveAssistant(msgs) {
+  try { await AsyncStorage.setItem(ASSISTANT_KEY, JSON.stringify(msgs)); } catch { /* ignore */ }
+}
+
 // ===== 已复制记录（回顾模块）=====
 const COPIED_KEY = 'ec_copied';
 let copiedListeners = [];
