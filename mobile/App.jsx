@@ -4,7 +4,7 @@
 import React, { useEffect, useState, useRef, useMemo } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, ScrollView, TextInput, ActivityIndicator,
-  Alert, Dimensions, Image, StatusBar, Platform,
+  Alert, Dimensions, Image, StatusBar, Platform, KeyboardAvoidingView,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as Clipboard from 'expo-clipboard';
@@ -310,7 +310,7 @@ function MessagesPage({ girl, settings, runLLM, updateGirl, logMsg, girlBar, red
   const history = girl?.history || [];
 
   return (
-    <View style={styles.pageWrap}>
+    <KeyboardAvoidingView style={styles.pageWrap} behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={0}>
       <PageHeader title={girl ? girl.name : '消息'} right={<GearButton onPress={onOpenSettings} redDot={redDot} />} />
       {girlBar}
 
@@ -397,7 +397,7 @@ function MessagesPage({ girl, settings, runLLM, updateGirl, logMsg, girlBar, red
           </TouchableOpacity>
         </View>
       </View>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -791,7 +791,7 @@ function AssistantScreen({ settings, redDot, onOpenSettings }) {
   };
 
   return (
-    <View style={styles.pageWrap}>
+    <KeyboardAvoidingView style={styles.pageWrap} behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={0}>
       <PageHeader title="助手" right={<GearButton onPress={onOpenSettings} redDot={redDot} />} />
       <ScrollView style={styles.content} ref={scroll} keyboardShouldPersistTaps="handled"
         onContentSizeChange={() => scroll.current && scroll.current.scrollToEnd({ animated: true })}>
@@ -870,7 +870,7 @@ function AssistantScreen({ settings, redDot, onOpenSettings }) {
           </TouchableOpacity>
         </View>
       </View>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 

@@ -1,8 +1,9 @@
 // Settings.jsx —— 半屏弹窗式设置（微信分组 cell 风 / 线条图标 / 点弹窗外即关 / 点选即自动保存）
-import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Alert } from 'react-native';
-import * as FileSystem from 'expo-file-system';
+import React, { useState } from 'react';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Alert, Dimensions } from 'react-native';
 import Icon from './Icon';
+
+const { height: SHEET_MAX } = Dimensions.get('window');
 
 const CLOUD_MODELS = [
   { id: 'glm-4-flash', name: 'glm-4-flash', note: '免费 · 速度快 · 效果一般' },
@@ -57,20 +58,6 @@ export default function Settings({ settings, onSave, onClose }) {
 
   // 任何改动立即写盘（不用再点保存）
   const set = (k, v) => { const n = { ...s, [k]: v }; setS(n); onSave(n); };
-
-  // 打开设置即检测手机内本地模型文件
-  const [modelStatus, setModelStatus] = useState(null);
-  useEffect(() => {
-    (async () => {
-      try {
-        const modelFile = s.modelFile || 'coach-qwen3b-q8_0.gguf';
-        const uri = (FileSystem.documentDirectory || '') + modelFile;
-        const info = await FileSystem.getInfoAsync(uri);
-        if (info.exists) setModelStatus({ found: true, gb: (info.size / 1073741824).toFixed(2) });
-        else setModelStatus({ found: false });
-      } catch (e) { setModelStatus({ found: false, err: String(e) }); }
-    })();
-  }, []);
 
   const nextResign = s.resignDate + 7 * 24 * 3600 * 1000;
   const tl = s.unlock?.tl ?? 2;
@@ -160,14 +147,10 @@ export default function Settings({ settings, onSave, onClose }) {
                   onChangeText={(t) => set('modelUrl', t)} autoCapitalize="none" />
               </View>
             </Group>
-            <Group title="本地模型状态（打开设置即检测）">
+            <Group title="本地模型状态">
               <View style={styles.statusBox}>
-                <Text style={[styles.note, modelStatus && modelStatus.found && styles.noteOk]}>
-                  {modelStatus == null
-                    ? '检测中…'
-                    : modelStatus.found
-                      ? `✅ 已找到 ${modelStatus.gb} GB（模型已在手机里）`
-                      : '❌ 未找到：请用电脑把 coach-qwen3b-q8_0.gguf 拖进 App 的「文件共享」'}
+                <Text style={styles.note}>
+                  在电脑上用 Apple 设备 / Finder 的「文件共享」把 coach-qwen3b-q8_0.gguf（约 3.4GB）拖入本 App 后，开启上方开关即可完全离线使用。{'\n'}若开启后发消息闪退，多半是内存不足，可关掉开关改走云端。
                 </Text>
               </View>
             </Group>
@@ -313,7 +296,7 @@ function StepRow({ label, value, onMinus, onPlus, last }) {
 const styles = StyleSheet.create({
   wrap: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'flex-end', zIndex: 50 },
   mask: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.4)' },
-  sheet: { backgroundColor: '#EDEDED', borderTopLeftRadius: 18, borderTopRightRadius: 18, maxHeight: '76%', paddingBottom: 16 },
+  sheet: { backgroundColor: '#EDEDED', borderTopLeftRadius: 18, borderTopRightRadius:18, maxHeight: SHEET_MAX * 0.76, paddingBottom: 16 },
   sheetHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#DCDCDC' },
   sheetTitle: { fontSize: 17, fontWeight: '700', color: '#191919' },
   backBtn: { width: 40, height: 32, alignItems: 'flex-start', justifyContent: 'center' },
